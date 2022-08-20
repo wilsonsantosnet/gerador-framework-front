@@ -1,5 +1,6 @@
 export enum ETypeLogin {
   SSO,
   Anonymous,
-  ResourceOwner
+  ResourceOwner,
+  B2C
 }

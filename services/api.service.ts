@@ -391,8 +391,8 @@ export class ApiService<T> {
     return url;
   }
 
- private makeSearchParams(filters?: any): HttpParams {
-    let params = new HttpParams();
+  private makeSearchParams(filters?: any): HttpParams {
+    const params = new HttpParams();
     if (filters != null) {
       for (const key in filters) {
 
@@ -400,19 +400,18 @@ export class ApiService<T> {
           if (filters[key]) {
             let values = filters[key].toString().split(",");
             for (let value in values) {
-              params = params.append(key, values[value]);
+              params.append(key, values[value]);
             }
           }
         }
         else if (filters.hasOwnProperty(key)) {
-          params = params.append(key, filters[key]);
+          params.set(key, filters[key]);
         }
       }
     }
 
     return params;
   }
-
 
   private successJsonResult(response: Observable<any>): Observable<T> {
     let _response = response

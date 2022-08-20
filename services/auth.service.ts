@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 import { Router, NavigationCancel } from '@angular/router';
-//import { URLSearchParams, } from '@angular/http';
 
 import { ApiService } from '../services/api.service';
 import { ECacheType } from '../type-cache.enum';
@@ -19,6 +18,7 @@ export class AuthService {
   private readonly _nameEndPointAuthApi: string;
   private readonly _typeLogin: ETypeLogin;
   private readonly _authorizationUrl: string;
+  private readonly _authorizationUrlB2C: string;
   private readonly _client_id: string;
   private readonly _client_id_ro: string;
   private readonly _client_id_cc: string;
@@ -40,6 +40,7 @@ export class AuthService {
     this._nameEndPointAuthApi = "AUTHAPI";
     this._typeLogin = GlobalService.getAuthSettings().TYPE_LOGIN;
     this._authorizationUrl = GlobalService.getEndPoints().AUTH + '/connect/authorize';
+    this._authorizationUrlB2C = GlobalService.getEndPoints().AUTH + '/authorize';
     this._authorizationClaimsAddUrl = GlobalService.getEndPoints().AUTH + '/AccountAfterAuth/ClaimsAdd';
     this._authorizationAfterLogin = GlobalService.getEndPoints().AUTH + '/Funnel/Register';
     this._client_id = GlobalService.getAuthSettings().CLIENT_ID;
@@ -103,6 +104,7 @@ export class AuthService {
     let state = Date.now() + "" + Math.random();
     localStorage["state"] = state;
     let token = CacheService.get(this._nameToken, this._cacheType)
+
     let url = this._authorizationAfterLogin + "?" +
       "userName=" + encodeURI(userName) + "&" +
       "password=" + encodeURI(password) + "&" +
@@ -122,10 +124,49 @@ export class AuthService {
 
   public loginSso() {
 
+
     if (this._typeLogin == ETypeLogin.Anonymous)
       return this.loginClientCredenciais((token) => {
         this.router.navigate(["/home"]);
       })
+
+
+    if (this._typeLogin == ETypeLogin.B2C)
+      this.LoginADB2C();
+
+
+    if (this._typeLogin == ETypeLogin.SSO)
+      this.LoginIDS4();
+
+
+
+    return this._typeLogin;
+
+  }
+
+  public LoginADB2C() {
+
+    this.startupService.load();
+
+    let state = Date.now() + "" + Math.random();
+    localStorage["state"] = state;
+
+    console.log("<<<<<< loginSso >>>>>", state, localStorage["state"]);
+
+    var url =
+      this._authorizationUrlB2C + "?" +
+      "client_id=" + encodeURI(this._client_id) + "&" +
+      "redirect_uri=" + encodeURI(this._redirect_uri) + "&" +
+      "response_type=" + encodeURI(this._response_type) + "&" +
+      "scope=" + encodeURI(this._scope) + "&" +
+      "response_mode=fragment" + "&" +
+      "state=" + encodeURI(state) + "&" +
+      "nonce=xyz";
+
+    window.location.href = url;
+  }
+
+  public LoginIDS4() {
 
     this.startupService.load();
 
@@ -144,8 +185,6 @@ export class AuthService {
       "nonce=xyz";
 
     window.location.href = url;
-    return this._typeLogin;
-
   }
 
   public claimsAddLoginSso(claim_type: string, claim_value: string) {
@@ -177,7 +216,14 @@ export class AuthService {
     this.reset();
 
     if (this._typeLogin == ETypeLogin.SSO) {
+      
       var authorizationUrl = GlobalService.getEndPoints().AUTH + '/account/logout?returnUrl=' + GlobalService.getEndPoints().APP + "/login";
+      console.log("logout", authorizationUrl);
+      window.location.href = authorizationUrl;
+    }
+    else if (this._typeLogin == ETypeLogin.B2C) {
+      var authorizationUrl = GlobalService.getEndPoints().AUTH + '/logout?post_logout_redirect_uri=' + GlobalService.getEndPoints().APP + "/login";
+      console.log("logout", authorizationUrl);
       window.location.href = authorizationUrl;
     }
     else {
@@ -186,6 +232,73 @@ export class AuthService {
   }
 
   public processTokenCallback() {
+
+    if (this._typeLogin == ETypeLogin.B2C)
+      this.processTokenCallbackB2C()
+
+
+    if (this._typeLogin == ETypeLogin.SSO)
+      this.processTokenCallbackIDS4()
+
+  }
+
+  public processTokenCallbackB2C() {
+
+    this.processTokenCallbackAsync().then((result) => {
+
+
+      if (!result.error) {
+
+        if (result.state !== localStorage["state"]) {
+          console.log("<<<<< INVALID STATE >>>>>>", result.state, localStorage["state"]);
+          localStorage.removeItem("state");
+          this.router.navigate(["/login"]);
+        }
+        else {
+
+          var token = result.access_token || result.id_token;
+          console.log("<<<<< VALID STATE >>>>>>", result.state, localStorage["state"]);
+          console.log("<<<<< ACCESS TOKEN >>>>>>", result.access_token);
+          console.log("<<<<< ID TOKEN >>>>>>", result.id_token);
+          console.log("<<<<< ENDPOINTS >>>>>>", GlobalService.getEndPoints());
+          localStorage.removeItem("state");
+          this._acceptlogin(token, false)
+        }
+      }
+
+
+    });
+
+  }
+
+  public processTokenCallbackAsync(): Promise<any> {
+
+    return new Promise((resolve: any) => {
+
+      var result: any = {};
+
+
+      if (window.location.href.indexOf("access_token") > -1) {
+
+        let hash = window.location.hash.substr(1);
+
+        let result = hash.split('&').reduce(function (result: any, item: any) {
+          let parts = item.split('=');
+          result[parts[0]] = parts[1];
+          return result;
+        }, {}) as any;
+
+
+        return resolve(result);
+
+      }
+
+    });
+
+
+  }
+
+  public processTokenCallbackIDS4() {
 
     if (window.location.href.indexOf("access_token") > -1) {
 
@@ -255,8 +368,8 @@ export class AuthService {
 
     //this.router.navigate(["/home"]);
 
-  //  if (reload)
-  //    window.location.reload();
+    //  if (reload)
+    //    window.location.reload();
   }
 
   reset() {
